@@ -1,0 +1,24 @@
+# Environment files
+.env
+
+# Dependencies
+/node_modules
+/vendor
+
+# Logs
+*.log
+
+# Build outputs
+/dist
+/build
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Database dumps
+*.sql
+
+# Apidog cache/temp 
+api_dog/*.tmp
+api_dog/*.bak
