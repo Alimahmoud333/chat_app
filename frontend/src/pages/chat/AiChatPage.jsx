@@ -19,7 +19,29 @@ export default function AiChatPage() {
   const [message, setMessage] = useState("");
 
   const [messages, setMessages] = useState(() => {
-    return JSON.parse(localStorage.getItem("chat_ai_messages")) || [];
+    try {
+      const savedMessages = JSON.parse(
+        localStorage.getItem("chat_ai_messages"),
+      );
+
+      if (!Array.isArray(savedMessages)) {
+        return [];
+      }
+
+      /*
+      Clean old wrong messages if any message was saved as object
+      */
+
+      return savedMessages.map((item) => ({
+        ...item,
+        message:
+          typeof item.message === "string"
+            ? item.message
+            : item.message?.message || "Invalid saved message",
+      }));
+    } catch (error) {
+      return [];
+    }
   });
 
   useEffect(() => {
@@ -39,10 +61,12 @@ export default function AiChatPage() {
       return;
     }
 
+    const userText = message.trim();
+
     const userMessage = {
       id: Date.now(),
       role: "user",
-      message: message.trim(),
+      message: userText,
       created_at: new Date().toISOString(),
     };
 
@@ -54,18 +78,20 @@ export default function AiChatPage() {
 
     try {
       const res = await API.post("/ai-chat", {
-        message: userMessage.message,
+        message: userText,
       });
 
+      const aiText =
+        res.data.reply ||
+        res.data.ai_message?.message ||
+        res.data.message ||
+        "No response from AI";
+
       const aiMessage = {
-        id: Date.now() + 1,
+        id: res.data.ai_message?.id || Date.now() + 1,
         role: "assistant",
-        message:
-          res.data.reply ||
-          res.data.message ||
-          res.data.ai_message ||
-          "No response from AI",
-        created_at: new Date().toISOString(),
+        message: aiText,
+        created_at: res.data.ai_message?.created_at || new Date().toISOString(),
       };
 
       setMessages((oldMessages) => [...oldMessages, aiMessage]);
@@ -113,6 +139,18 @@ export default function AiChatPage() {
     });
   }
 
+  function renderMessageText(value) {
+    if (typeof value === "string") {
+      return value;
+    }
+
+    if (value?.message) {
+      return value.message;
+    }
+
+    return "Invalid message";
+  }
+
   return (
     <div className="ai-chat-page">
       <div className="ai-chat-header">
@@ -123,6 +161,7 @@ export default function AiChatPage() {
 
           <div>
             <h5 className="fw-bold mb-0">AI Assistant</h5>
+
             <small className="text-muted">
               Ask anything about your project, code, or messages
             </small>
@@ -145,17 +184,19 @@ export default function AiChatPage() {
             <h4 className="fw-bold mb-2">How can I help you?</h4>
 
             <p className="text-muted mb-4">
-              You can ask the AI assistant about your 
-              chat features, errors, or project ideas.
+              You can ask the AI assistant about your chat features, errors, or
+              project ideas.
             </p>
 
             <div className="row g-3">
               <div className="col-md-6">
                 <button
+                  type="button"
                   className="ai-suggestion-card"
                   onClick={() =>
                     setMessage("Explain my chat application architecture.")
-                  }>
+                  }
+                >
                   <i className="bi bi-diagram-3"></i>
                   <span>Explain my chat architecture</span>
                 </button>
@@ -163,10 +204,12 @@ export default function AiChatPage() {
 
               <div className="col-md-6">
                 <button
+                  type="button"
                   className="ai-suggestion-card"
                   onClick={() =>
                     setMessage("Give me ideas to improve this chat app.")
-                  }>
+                  }
+                >
                   <i className="bi bi-lightbulb"></i>
                   <span>Give improvement ideas</span>
                 </button>
@@ -174,12 +217,14 @@ export default function AiChatPage() {
 
               <div className="col-md-6">
                 <button
+                  type="button"
                   className="ai-suggestion-card"
                   onClick={() =>
                     setMessage(
                       "How can I explain this project in an interview?",
                     )
-                  }>
+                  }
+                >
                   <i className="bi bi-person-workspace"></i>
                   <span>Interview explanation</span>
                 </button>
@@ -187,10 +232,10 @@ export default function AiChatPage() {
 
               <div className="col-md-6">
                 <button
+                  type="button"
                   className="ai-suggestion-card"
-                  onClick={() =>
-                    setMessage("What features should I add next?")
-                  }>
+                  onClick={() => setMessage("What features should I add next?")}
+                >
                   <i className="bi bi-list-check"></i>
                   <span>Next feature ideas</span>
                 </button>
@@ -205,7 +250,8 @@ export default function AiChatPage() {
           return (
             <div
               key={item.id}
-              className={`ai-message-row ${isMine ? "mine" : "assistant"}`}>
+              className={`ai-message-row ${isMine ? "mine" : "assistant"}`}
+            >
               {!isMine && (
                 <div className="ai-message-avatar">
                   <i className="bi bi-robot"></i>
@@ -215,8 +261,11 @@ export default function AiChatPage() {
               <div
                 className={`ai-message-bubble ${
                   item.is_error ? "ai-error-bubble" : ""
-                }`}>
-                <div className="ai-message-text">{item.message}</div>
+                }`}
+              >
+                <div className="ai-message-text">
+                  {renderMessageText(item.message)}
+                </div>
 
                 <div className="ai-message-time">
                   {formatTime(item.created_at)}
@@ -228,7 +277,7 @@ export default function AiChatPage() {
                   src={`${DEFAULT_AVATAR}&name=${encodeURIComponent(
                     user?.name || "User",
                   )}`}
-                  alt={user?.name}
+                  alt={user?.name || "User"}
                   className="ai-user-avatar"
                 />
               )}
