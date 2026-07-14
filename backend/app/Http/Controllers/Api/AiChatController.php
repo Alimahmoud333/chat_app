@@ -6,10 +6,10 @@ use App\Models\User;
 use App\Models\Message;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-use App\Http\Controllers\Controller;
-use OpenAI\Laravel\Facades\OpenAI;
 use App\Events\PrivateMessageSent;
+use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Hash;
+use OpenAI\Laravel\Facades\OpenAI;
 
 class AiChatController extends Controller
 {
@@ -21,11 +21,18 @@ class AiChatController extends Controller
 
     public function ask(Request $request)
     {
+        /*
+        =========================================
+        VALIDATION
+        =========================================
+        */
+
         $request->validate([
 
             'message' => [
                 'required',
                 'string',
+                'max:2000',
             ],
         ]);
 
@@ -41,11 +48,19 @@ class AiChatController extends Controller
             ],
             [
                 'name' => 'AI Assistant',
-                'password' => Hash::make(Str::random(32)),
+
+                'password' => Hash::make(
+                    Str::random(32)
+                ),
+
                 'phone' => 'ai-' . time(),
+
                 'phone_verified_at' => now(),
+
                 'email_verified_at' => now(),
+
                 'role' => 'user',
+
                 'is_online' => true,
             ]
         );
@@ -81,28 +96,83 @@ class AiChatController extends Controller
         =========================================
         */
 
-        $response = OpenAI::chat()->create([
+        try {
 
-            'model' => 'gpt-4.1-mini',
+            $response = OpenAI::chat()->create([
 
-            'messages' => [
+                'model' => 'gpt-4.1-mini',
 
-                [
-                    'role' => 'system',
-                    'content' => 'You are a helpful AI assistant inside a chat app.',
+                'messages' => [
+
+                    [
+                        'role' => 'system',
+                        'content' => 'You are a helpful AI assistant inside a chat app. Keep answers short, clear, and useful.',
+                    ],
+
+                    [
+                        'role' => 'user',
+                        'content' => $request->message,
+                    ],
                 ],
 
-                [
-                    'role' => 'user',
-                    'content' => $request->message,
-                ],
-            ],
-        ]);
+                'max_tokens' => 300,
 
-        $aiReply = $response
-            ->choices[0]
-            ->message
-            ->content;
+                'temperature' => 0.7,
+            ]);
+
+            $aiReply = $response
+                ->choices[0]
+                ->message
+                ->content;
+
+        } catch (\Exception $e) {
+
+            /*
+            =========================================
+            SAVE FALLBACK AI MESSAGE
+            =========================================
+            */
+
+            $aiReply = 'AI service is currently unavailable. Please check OpenAI API key, billing, quota, or model name.';
+
+            $aiMessage = Message::create([
+
+                'sender_id' => $aiUser->id,
+
+                'receiver_id' => auth()->id(),
+
+                'message' => $aiReply,
+
+                'type' => 'text',
+
+                'is_seen' => false,
+
+                'is_delivered' => true,
+
+                'delivered_at' => now(),
+            ]);
+
+            return response()->json([
+
+                'status' => false,
+
+                'message' => 'AI service error',
+
+                'reply' => $aiReply,
+
+                'error' => $e->getMessage(),
+
+                'user_message' => $userMessage->load([
+                    'sender',
+                    'receiver',
+                ]),
+
+                'ai_message' => $aiMessage->load([
+                    'sender',
+                    'receiver',
+                ]),
+            ], 500);
+        }
 
         /*
         =========================================
@@ -137,9 +207,19 @@ class AiChatController extends Controller
             new PrivateMessageSent($aiMessage)
         )->toOthers();
 
+        /*
+        =========================================
+        RESPONSE
+        =========================================
+        */
+
         return response()->json([
 
             'status' => true,
+
+            'message' => 'AI reply generated successfully',
+
+            'reply' => $aiReply,
 
             'user_message' => $userMessage->load([
                 'sender',
